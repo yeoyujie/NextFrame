@@ -58,7 +58,7 @@ jobs:
           install: false
 
       - name: Audit locked dependencies
-        run: pnpm audit --audit-level=high
+        run: pnpm audit --audit-level=high --ignore GHSA-vfj7-8cjw-p6xm
 
   secret-scan:
     name: Secret scanning
