@@ -39,10 +39,11 @@ The homepage displays **series**, not individual episodes.
 Users:
 
 1. Browse the series catalogue.
-2. Hover over a series card to preview its video.
-3. Click a series to enter the watch experience.
-4. Watch episodes sequentially.
-5. Navigate between episodes.
+2. Open a series at its first episode.
+3. Watch episodes sequentially.
+4. Navigate between episodes.
+
+Hover previews are a possible future enhancement, not part of the current PoC.
 
 There are no user accounts or per-user state.
 
@@ -52,23 +53,23 @@ Design NextFrame as a modern, polished video product: cinematic and distinctive,
 
 Every visible element should help users discover a series, understand what they are watching, or continue to another episode. Keep screens focused, with one clear primary action. Do not add controls, navigation, or feature placeholders without a real product need.
 
-Use a consistent spacing, typography, and radius system, favoring the existing Tailwind scale. Keep content within a sensible maximum width. Prefer readable contrast and subtle, short transitions. Respect `prefers-reduced-motion`; motion should communicate feedback or state, not decorate the page.
+Use the existing CSS variables, spacing, typography, and radius patterns. The current UI is primarily authored in `app/globals.css`; do not add a second styling system just because Tailwind is installed. Keep content within a sensible maximum width. Prefer readable contrast and subtle, short transitions. Respect `prefers-reduced-motion`; motion should communicate feedback or state, not decorate the page.
 
 Use familiar, accessible interactions: semantic links for navigation, buttons for actions, clear hover and pressed feedback, and visible keyboard focus. Make content cards easy to activate across their full area. Prefer native browser behavior unless there is a clear UX reason to replace it.
 
-Reserve space for images and video to prevent layout shifts. Keep series and episode artwork at a consistent video aspect ratio, and preserve the thumbnail until a preview is ready. Avoid overloading catalogue cards; show the artwork, title, and only useful supporting metadata. Put fuller episode information on the watch page.
+Reserve space for images and video to prevent layout shifts. Keep series and episode artwork at a consistent video aspect ratio. Use configured artwork when available and a deliberate fallback when it is not; the current catalogue has no thumbnail assets. Avoid overloading catalogue cards; show the artwork, title, and only useful supporting metadata. Put fuller episode information on the watch page.
 
 Design mobile intentionally rather than shrinking desktop layouts. In particular, the watch page should place the player first, followed by episode information and the episode list. Keep the current episode obvious through more than color alone, and retain the series context while navigating.
 
 Use reusable components where they represent genuinely repeated UI, such as `SeriesCard`, `EpisodeCard`, `VideoPlayer`, `EpisodeList`, and `Header`. Keep their responsibilities clear; do not build a large generic component for unrelated patterns.
 
-The core experience is:
+The current core experience is:
 
 ```text
-Discover a series → Preview it → Open it → Watch → Continue to the next episode
+Discover a series → Open it → Watch → Continue to the next episode
 ```
 
-Evaluate design changes against this loop: they should make discovery or viewing clearer, more comfortable, or more engaging.
+Evaluate design changes against this loop: they should make discovery or viewing clearer, more comfortable, or more engaging. Do not describe or imply a feature is implemented unless it exists in the code.
 
 
 ## Engineering Standards
@@ -104,12 +105,10 @@ Approach interface design with the judgment of an experienced product designer a
 The homepage should feel closer to YouTube/Netflix than Pinterest.
 
 * Display curated series cards.
-* Show thumbnails immediately.
-* Hovering a card may start a muted video preview after a short delay.
-* Only the currently hovered card should play a preview.
-* Stop/unload the preview when the pointer leaves the card.
-* Do not load or autoplay all preview videos on initial page load.
+* Show configured thumbnails immediately; use the card's fallback artwork when none is configured.
 * Series are the primary unit of discovery.
+
+The current PoC has no hover video previews. If they are added later, require a dedicated preview source that can play muted and independently of the official Douyin watch player. Delay loading until interaction, allow at most one preview at a time, and stop/unload it when interaction ends. Do not load previews on initial page load. If Douyin's embed cannot provide that behavior reliably, keep cards thumbnail-only.
 
 A featured series section may be used if it improves the visual presentation.
 
@@ -165,55 +164,15 @@ The URL should uniquely identify the series and currently selected episode.
 
 Content is stored as static TypeScript data.
 
-Preferred model:
-
-```ts
-type Series = {
-  slug: string
-  title: string
-  description: string
-  thumbnail: string
-  episodes: Episode[]
-}
-
-type Episode = {
-  number: number
-  title: string
-  thumbnail: string
-  douyinUrl: string
-  previewUrl?: string
-}
-```
+Treat `data/series.ts` as the canonical schema. Episodes currently store a public Douyin video ID and optional player dimensions; series and episode artwork are optional. `previewUrl` is reserved but currently unused. Keep the model small and add fields when a real UI feature needs them.
 
 Avoid introducing a database, CMS, or backend unless there is a clear future requirement.
 
 ## Video Architecture
 
-Keep video playback abstracted from the rest of the UI.
+Douyin is the only supported video provider for this PoC. Keep player URL construction and iframe behavior in `VideoPlayer`; keep any Douyin API lookup in a small, named helper rather than spreading it through the UI. The episode route currently looks up optional player dimensions this way. Do not build a generic multi-provider or CDN player path for hypothetical future sources; add one only when the catalogue actually needs it.
 
-The application should be able to support different video sources in the future.
-
-Conceptually:
-
-```tsx
-<VideoPlayer
-  source="douyin"
-  url={episode.douyinUrl}
-/>
-```
-
-and potentially:
-
-```tsx
-<VideoPlayer
-  source="cdn"
-  src={episode.videoUrl}
-/>
-```
-
-Do not tightly couple the entire application to a specific video provider.
-
-When an episode is hosted on Douyin, embed it with Douyin's official iframe player (`https://open.douyin.com/player/video?...`). Use the Douyin Open Platform's documented `get_iframe_by_video` API to obtain the iframe markup from a public video ID when needed; the documentation says this endpoint does not require permission application. Do not embed a regular Douyin watch page as an iframe or scrape/download Douyin video files. If a video is hosted on our own CDN instead, use the CDN player path.
+For Douyin episodes, use the official iframe player at `https://open.douyin.com/player/video?...` with a public video ID. The documented `get_iframe_by_video` API returns `iframe_code`, title, and dimensions without requiring permission application. The current code calls it for dimensions and constructs the equivalent player URL itself; it does not currently consume `iframe_code`. Do not embed a regular Douyin watch page as an iframe or scrape/download Douyin video files. If another provider becomes a real requirement, add its playback path behind the same component boundary.
 
 ## Performance
 
@@ -224,24 +183,14 @@ Initial page load should prioritize:
 ```text
 Series metadata
       ↓
-Thumbnail images
+Configured thumbnails or fallback artwork
       ↓
-User hovers a card
+User opens an episode
       ↓
-Load/play preview video
+Load the official Douyin player
 ```
 
-Do not load all preview videos when the homepage loads.
-
-Preview videos should generally be:
-
-* muted
-* controls hidden
-* delayed slightly before starting
-* stopped when the pointer leaves
-* unloaded when appropriate
-
-The number of simultaneously playing preview videos should normally be **one**.
+If hover previews are introduced, follow the deferred, single-preview loading rules in the Homepage section.
 
 ## Architecture Philosophy
 

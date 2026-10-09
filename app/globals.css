@@ -365,10 +365,6 @@ a:focus-visible {
   border: 0;
 }
 
-.player-stage-loading {
-  max-width: 940px;
-}
-
 .cdn-player {
   display: block;
   width: 100%;
@@ -453,14 +449,17 @@ a:focus-visible {
 }
 
 .episode-sidebar {
+  display: flex;
   min-height: 0;
-  overflow-y: auto;
+  flex-direction: column;
+  overflow: hidden;
   padding-left: 26px;
   border-left: 1px solid var(--line);
 }
 
 .episode-list-heading {
   display: flex;
+  flex: 0 0 auto;
   align-items: end;
   justify-content: space-between;
   margin-bottom: 18px;
@@ -478,10 +477,36 @@ a:focus-visible {
 
 .episode-list {
   display: grid;
+  min-height: 0;
+  flex: 1 1 auto;
   gap: 5px;
   margin: 0;
   padding: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  scrollbar-color: #b9bcb5 transparent;
+  scrollbar-width: thin;
   list-style: none;
+}
+
+.episode-list::-webkit-scrollbar {
+  width: 8px;
+}
+
+.episode-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.episode-list::-webkit-scrollbar-thumb {
+  border: 2px solid transparent;
+  border-radius: 999px;
+  background: #b9bcb5;
+  background-clip: content-box;
+}
+
+.episode-list::-webkit-scrollbar-thumb:hover {
+  background-color: #858a83;
 }
 
 .episode-list-item {
@@ -608,10 +633,17 @@ a:focus-visible {
   }
 
   .episode-sidebar {
+    display: block;
     max-height: none;
+    overflow: visible;
     padding: 24px 20px 0;
     border-top: 1px solid var(--line);
     border-left: 0;
+  }
+
+  .episode-list {
+    overflow: visible;
+    scrollbar-gutter: auto;
   }
 
   .episode-list-item {
@@ -652,11 +684,17 @@ a:focus-visible {
   }
 
   .episode-sidebar {
+    display: block;
     max-height: none;
     overflow: visible;
     padding: 24px 0 0;
     border-top: 1px solid var(--line);
     border-left: 0;
+  }
+
+  .episode-list {
+    overflow: visible;
+    scrollbar-gutter: auto;
   }
 }
 
@@ -747,6 +785,16 @@ a:focus-visible {
   .watch-layout {
     display: grid;
     height: 100%;
+  }
+
+  .episode-sidebar {
+    display: flex;
+    overflow: hidden;
+  }
+
+  .episode-list {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
   }
 }
 
