@@ -1,0 +1,163 @@
+import { notFound } from "next/navigation";
+import { Suspense } from "react";
+import Link from "next/link";
+import { VideoPlayer } from "@/components/video-player";
+import { seriesCatalog } from "@/data/series";
+
+export function generateStaticParams() {
+  return seriesCatalog.flatMap((series) =>
+    series.episodes.map((episode) => ({
+      slug: series.slug,
+      episode: String(episode.number),
+    })),
+  );
+}
+
+type EpisodeRouteProps = PageProps<"/series/[slug]/episode/[episode]">;
+
+export default function EpisodePage(props: EpisodeRouteProps) {
+  return (
+    <Suspense fallback={<EpisodePageFallback />}>
+      <EpisodePageContent params={props.params} />
+    </Suspense>
+  );
+}
+
+function EpisodePageFallback() {
+  return (
+    <main className="watch-shell" aria-label="Loading episode">
+      <div className="watch-layout">
+        <div className="watch-main">
+          <div className="player-stage player-stage-loading" />
+        </div>
+      </div>
+    </main>
+  );
+}
+
+async function EpisodePageContent({
+  params,
+}: Pick<EpisodeRouteProps, "params">) {
+  const { slug, episode: episodeParam } = await params;
+  const series = seriesCatalog.find((item) => item.slug === slug);
+  const episodeNumber = /^\d+$/.test(episodeParam)
+    ? Number(episodeParam)
+    : NaN;
+  const episode = series?.episodes.find((item) => item.number === episodeNumber);
+
+  if (!series || !episode) notFound();
+
+  const currentIndex = series.episodes.findIndex(
+    (item) => item.number === episode.number,
+  );
+  const previousEpisode = series.episodes[currentIndex - 1];
+  const nextEpisode = series.episodes[currentIndex + 1];
+  const videoSource = await addDouyinDimensions(episode.source);
+
+  return (
+    <main className="watch-shell">
+      <div className="watch-layout">
+        <section className="watch-main" aria-labelledby="episode-title">
+          <VideoPlayer
+            source={videoSource}
+            title={`${series.title} — ${episode.title}`}
+          />
+
+          <div className="episode-details">
+            <Link className="series-context" href="/">
+              <span aria-hidden="true">←</span> {series.title}
+            </Link>
+            <div className="episode-heading">
+              <p className="episode-kicker">Episode {episode.number}</p>
+              <h1 id="episode-title">{episode.title}</h1>
+            </div>
+            <p className="episode-description">{series.description}</p>
+          </div>
+
+          <nav className="episode-navigation" aria-label="Episode navigation">
+            {previousEpisode ? (
+              <Link
+                href={`/series/${series.slug}/episode/${previousEpisode.number}`}
+                rel="prev"
+              >
+                <span>Previous episode</span>
+                <strong>Episode {previousEpisode.number}</strong>
+              </Link>
+            ) : <span />}
+            {nextEpisode ? (
+              <Link
+                href={`/series/${series.slug}/episode/${nextEpisode.number}`}
+                rel="next"
+              >
+                <span>Next episode</span>
+                <strong>Episode {nextEpisode.number} <span aria-hidden="true">→</span></strong>
+              </Link>
+            ) : <span />}
+          </nav>
+        </section>
+
+        <aside className="episode-sidebar" aria-labelledby="episode-list-title">
+          <div className="episode-list-heading">
+            <div>
+              <p className="eyebrow">Series</p>
+              <h2 id="episode-list-title">Episodes</h2>
+            </div>
+            <span>{series.episodes.length}</span>
+          </div>
+
+          <ol className="episode-list">
+            {series.episodes.map((item) => {
+              const isCurrent = item.number === episode.number;
+
+              return (
+                <li key={item.number}>
+                  <Link
+                    className={`episode-list-item${isCurrent ? " is-current" : ""}`}
+                    href={`/series/${series.slug}/episode/${item.number}`}
+                    aria-current={isCurrent ? "page" : undefined}
+                  >
+                    <span className="episode-number">{String(item.number).padStart(2, "0")}</span>
+                    <span className="episode-list-copy">
+                      <strong>{item.title}</strong>
+                      <span>{isCurrent ? "Now playing" : `Episode ${item.number}`}</span>
+                    </span>
+                    {isCurrent && <span className="playing-indicator" aria-hidden="true">●</span>}
+                  </Link>
+                </li>
+              );
+            })}
+          </ol>
+        </aside>
+      </div>
+    </main>
+  );
+}
+
+async function addDouyinDimensions(
+  source: Extract<(typeof seriesCatalog)[number]["episodes"][number]["source"], { provider: "douyin" }>,
+) {
+  try {
+    const endpoint = new URL(
+      "https://open.douyin.com/api/douyin/v1/video/get_iframe_by_video",
+    );
+    endpoint.searchParams.set("video_id", source.videoId);
+
+    const response = await fetch(endpoint, { next: { revalidate: 86400 } });
+    if (!response.ok) return source;
+
+    const result: {
+      err_no?: number;
+      data?: { video_width?: number; video_height?: number };
+    } = await response.json();
+
+    if (result.err_no !== 0) return source;
+
+    return {
+      ...source,
+      videoWidth: result.data?.video_width ?? source.videoWidth,
+      videoHeight: result.data?.video_height ?? source.videoHeight,
+    };
+  } catch {
+    return source;
+  }
+}
